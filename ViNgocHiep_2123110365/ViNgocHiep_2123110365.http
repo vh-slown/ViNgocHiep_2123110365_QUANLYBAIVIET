@@ -1,0 +1,6 @@
+@ViNgocHiep_2123110365_HostAddress = http://localhost:5080
+
+GET {{ViNgocHiep_2123110365_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -19,5 +19,19 @@ public class AppDbContext : DbContext
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.Entity<Favorite>().HasKey(f => new { f.UserId, f.BookId });
+
+        modelBuilder
+            .Entity<Comment>()
+            .HasOne(c => c.User)
+            .WithMany(u => u.Comments)
+            .HasForeignKey(c => c.UserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        modelBuilder
+            .Entity<Favorite>()
+            .HasOne(f => f.User)
+            .WithMany(u => u.Favorites)
+            .HasForeignKey(f => f.UserId)
+            .OnDelete(DeleteBehavior.NoAction);
     }
 }

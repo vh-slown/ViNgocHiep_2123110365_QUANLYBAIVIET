@@ -13,7 +13,19 @@ public class Book
     public string Title { get; set; } = string.Empty;
 
     [Required]
+    [StringLength(255)]
+    public string Slug { get; set; } = string.Empty;
+
+    [StringLength(500)]
+    public string? Thumbnail { get; set; }
+
+    [StringLength(500)]
+    public string? Summary { get; set; }
+
+    [Required]
     public string Content { get; set; } = string.Empty;
+
+    public int ViewCount { get; set; } = 0;
 
     public byte Status { get; set; } = 1;
 
@@ -24,6 +36,8 @@ public class Book
     public int CategoryId { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public DateTime? UpdatedAt { get; set; }
 
     [ForeignKey("UserId")]
     public User? User { get; set; }

@@ -11,7 +11,15 @@ public class Category
     [StringLength(100)]
     public string Name { get; set; } = string.Empty;
 
+    [Required]
+    [StringLength(100)]
+    public string Slug { get; set; } = string.Empty;
+
+    [StringLength(500)]
+    public string? Image { get; set; }
+
     public string? Description { get; set; }
 
+    // Navigation Property
     public ICollection<Book>? Books { get; set; }
 }

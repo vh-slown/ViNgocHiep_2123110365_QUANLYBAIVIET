@@ -13,17 +13,28 @@ public class User
 
     [Required]
     [StringLength(100)]
+    public string FullName { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(100)]
     public string Email { get; set; } = string.Empty;
 
     [Required]
     [StringLength(255)]
     public string Password { get; set; } = string.Empty;
 
+    [StringLength(500)]
+    public string? Avatar { get; set; }
+
+    [StringLength(1000)]
+    public string? Bio { get; set; }
+
     [StringLength(20)]
     public string Role { get; set; } = "member";
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
+    // Navigation Properties
     public ICollection<Book>? Books { get; set; }
     public ICollection<Comment>? Comments { get; set; }
     public ICollection<Favorite>? Favorites { get; set; }

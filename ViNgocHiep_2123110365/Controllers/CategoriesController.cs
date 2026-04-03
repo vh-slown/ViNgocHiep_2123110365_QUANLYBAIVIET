@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ViNgocHiep_2123110365.Data;
+using ViNgocHiep_2123110365.DTOs;
 using ViNgocHiep_2123110365.Models;
 
 namespace ViNgocHiep_2123110365.Controllers
@@ -18,14 +19,23 @@ namespace ViNgocHiep_2123110365.Controllers
 
         // GET: api/Categories
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Category>>> GetCategories()
+        public async Task<ActionResult<IEnumerable<CategoryDTO>>> GetCategories()
         {
-            return await _context.Categories.ToListAsync();
+            return await _context
+                .Categories.Select(c => new CategoryDTO
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    Slug = c.Slug,
+                    Image = c.Image,
+                    Description = c.Description,
+                })
+                .ToListAsync();
         }
 
         // GET: api/Categories/{id}
         [HttpGet("{id}")]
-        public async Task<ActionResult<Category>> GetCategory(int id)
+        public async Task<ActionResult<CategoryDTO>> GetCategory(int id)
         {
             var category = await _context.Categories.FindAsync(id);
 
@@ -34,7 +44,14 @@ namespace ViNgocHiep_2123110365.Controllers
                 return NotFound();
             }
 
-            return category;
+            return new CategoryDTO
+            {
+                Id = category.Id,
+                Name = category.Name,
+                Slug = category.Slug,
+                Image = category.Image,
+                Description = category.Description,
+            };
         }
 
         // POST: api/Categories

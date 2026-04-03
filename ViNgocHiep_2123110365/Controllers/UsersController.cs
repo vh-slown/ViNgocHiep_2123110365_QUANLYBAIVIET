@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ViNgocHiep_2123110365.Data;
+using ViNgocHiep_2123110365.DTOs;
 using ViNgocHiep_2123110365.Models;
 
 namespace ViNgocHiep_2123110365.Controllers
@@ -18,14 +19,22 @@ namespace ViNgocHiep_2123110365.Controllers
 
         // GET: api/Users
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<User>>> GetUsers()
+        public async Task<ActionResult<IEnumerable<UserDTO>>> GetUsers()
         {
-            return await _context.Users.ToListAsync();
+            return await _context
+                .Users.Select(u => new UserDTO
+                {
+                    Id = u.Id,
+                    FullName = u.FullName,
+                    Username = u.Username,
+                    Avatar = u.Avatar,
+                })
+                .ToListAsync();
         }
 
         // GET: api/Users/{id}
         [HttpGet("{id}")]
-        public async Task<ActionResult<User>> GetUser(int id)
+        public async Task<ActionResult<UserDTO>> GetUser(int id)
         {
             var user = await _context.Users.FindAsync(id);
 
@@ -34,7 +43,13 @@ namespace ViNgocHiep_2123110365.Controllers
                 return NotFound();
             }
 
-            return user;
+            return new UserDTO
+            {
+                Id = user.Id,
+                FullName = user.FullName,
+                Username = user.Username,
+                Avatar = user.Avatar,
+            };
         }
 
         // POST: api/Users

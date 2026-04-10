@@ -19,6 +19,8 @@ public class Comment
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
+    public bool IsDeleted { get; set; } = false;
+
     // Navigation Properties
     [ForeignKey("UserId")]
     public User? User { get; set; }

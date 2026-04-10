@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ViNgocHiep_2123110365.Data;
 using ViNgocHiep_2123110365.DTOs;
@@ -55,6 +56,7 @@ namespace ViNgocHiep_2123110365.Controllers
         }
 
         // POST: api/Categories
+        [Authorize(Roles = "admin")]
         [HttpPost]
         public async Task<ActionResult<Category>> PostCategory(Category category)
         {
@@ -65,6 +67,7 @@ namespace ViNgocHiep_2123110365.Controllers
         }
 
         // PUT: api/Categories/{id}
+        [Authorize(Roles = "admin")]
         [HttpPut("{id}")]
         public async Task<IActionResult> PutCategory(int id, Category category)
         {
@@ -95,6 +98,7 @@ namespace ViNgocHiep_2123110365.Controllers
         }
 
         // DELETE: api/Categories/{id}
+        [Authorize(Roles = "admin")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteCategory(int id)
         {

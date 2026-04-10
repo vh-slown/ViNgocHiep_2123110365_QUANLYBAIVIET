@@ -1,4 +1,5 @@
 ﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ViNgocHiep_2123110365.Data;
@@ -143,9 +144,16 @@ namespace ViNgocHiep_2123110365.Controllers
         }
 
         // POST: api/Books
+        [Authorize(Roles = "admin,member")]
         [HttpPost]
         public async Task<ActionResult<Book>> PostBook(Book book)
         {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int uid))
+            {
+                book.UserId = uid;
+            }
+
             book.CreatedAt = DateTime.Now;
 
             _context.Books.Add(book);
@@ -155,15 +163,38 @@ namespace ViNgocHiep_2123110365.Controllers
         }
 
         // PUT: api/Books/{id}
+        [Authorize(Roles = "admin,member")]
         [HttpPut("{id}")]
         public async Task<IActionResult> PutBook(int id, Book book)
         {
             if (id != book.Id)
-            {
                 return BadRequest();
+
+            var oldBook = await _context.Books.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id);
+            if (oldBook == null)
+                return NotFound();
+
+            var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            var isUserAdmin = User.IsInRole("admin");
+
+            if (!isUserAdmin && oldBook.UserId != currentUserId)
+            {
+                return Forbid();
             }
 
+            var history = new BookHistory
+            {
+                BookId = id,
+                OldContent = oldBook.Content,
+                EditedByUserId = currentUserId,
+                EditedAt = DateTime.Now,
+            };
+            _context.BookHistories.Add(history);
+
             book.UpdatedAt = DateTime.Now;
+
+            book.UserId = oldBook.UserId;
+
             _context.Entry(book).State = EntityState.Modified;
 
             try
@@ -186,16 +217,23 @@ namespace ViNgocHiep_2123110365.Controllers
         }
 
         // DELETE: api/Books/{id}
+        [Authorize(Roles = "admin,member")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteBook(int id)
         {
             var book = await _context.Books.FindAsync(id);
             if (book == null)
-            {
                 return NotFound();
+
+            var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            var isUserAdmin = User.IsInRole("admin");
+
+            if (!isUserAdmin && book.UserId != currentUserId)
+            {
+                return Forbid();
             }
 
-            _context.Books.Remove(book);
+            book.IsDeleted = true;
             await _context.SaveChangesAsync();
 
             return NoContent();

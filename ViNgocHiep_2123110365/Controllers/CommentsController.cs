@@ -114,7 +114,8 @@ namespace ViNgocHiep_2123110365.Controllers
                 return NotFound();
             }
 
-            _context.Comments.Remove(comment);
+            comment.IsDeleted = true;
+
             await _context.SaveChangesAsync();
 
             return NoContent();

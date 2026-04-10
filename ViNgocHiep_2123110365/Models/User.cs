@@ -34,6 +34,8 @@ public class User
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
+    public bool IsDeleted { get; set; } = false;
+
     // Navigation Properties
     public ICollection<Book>? Books { get; set; }
     public ICollection<Comment>? Comments { get; set; }

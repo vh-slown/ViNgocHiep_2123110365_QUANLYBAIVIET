@@ -39,6 +39,8 @@ public class Book
 
     public DateTime? UpdatedAt { get; set; }
 
+    public bool IsDeleted { get; set; } = false;
+
     [ForeignKey("UserId")]
     public User? User { get; set; }
 

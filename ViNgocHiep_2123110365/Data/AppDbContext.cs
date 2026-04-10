@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Book> Books { get; set; }
     public DbSet<Comment> Comments { get; set; }
     public DbSet<Favorite> Favorites { get; set; }
+    public DbSet<BookHistory> BookHistories { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -33,5 +34,13 @@ public class AppDbContext : DbContext
             .WithMany(u => u.Favorites)
             .HasForeignKey(f => f.UserId)
             .OnDelete(DeleteBehavior.NoAction);
+
+        modelBuilder.Entity<Book>().HasQueryFilter(b => !b.IsDeleted);
+        modelBuilder.Entity<User>().HasQueryFilter(u => !u.IsDeleted);
+
+        modelBuilder.Entity<Comment>().HasQueryFilter(c => !c.IsDeleted && !c.Book!.IsDeleted);
+
+        modelBuilder.Entity<Favorite>().HasQueryFilter(f => !f.Book!.IsDeleted);
+        modelBuilder.Entity<BookHistory>().HasQueryFilter(h => !h.Book!.IsDeleted);
     }
 }

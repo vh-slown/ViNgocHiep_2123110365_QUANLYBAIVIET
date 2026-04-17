@@ -44,6 +44,17 @@ namespace ViNgocHiep_2123110365
                     };
                 });
 
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy(
+                    "AllowAll",
+                    policy =>
+                    {
+                        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+                    }
+                );
+            });
+
             builder.Services.AddControllers();
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
@@ -51,6 +62,19 @@ namespace ViNgocHiep_2123110365
             // Swagger with JWT Authentication
             builder.Services.AddSwaggerGen(c =>
             {
+                c.SwaggerDoc(
+                    "v1",
+                    new Microsoft.OpenApi.Models.OpenApiInfo
+                    {
+                        Title = "VastVerse API",
+                        Version = "v1",
+                        Description =
+                            "### TÀI KHOẢN TEST \n"
+                            + "* **Tài khoản Admin (Toàn quyền):** `admin` | Mật khẩu: `123456`\n\n"
+                            + "* **Tài khoản User (Người dùng):** `user` | Mật khẩu: `123456`\n\n"
+                            + "---",
+                    }
+                );
                 c.AddSecurityDefinition(
                     "Bearer",
                     new Microsoft.OpenApi.Models.OpenApiSecurityScheme
@@ -60,7 +84,7 @@ namespace ViNgocHiep_2123110365
                         Scheme = "Bearer",
                         BearerFormat = "JWT",
                         In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-                        Description = "Nhập Token của bạn vào đây.",
+                        Description = "Nhập Token.",
                     }
                 );
 
@@ -92,6 +116,8 @@ namespace ViNgocHiep_2123110365
             //}
 
             app.UseHttpsRedirection();
+
+            app.UseCors("AllowAll");
 
             app.UseAuthentication();
             app.UseAuthorization();

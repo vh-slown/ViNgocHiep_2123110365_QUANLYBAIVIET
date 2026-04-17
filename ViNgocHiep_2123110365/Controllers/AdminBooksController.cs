@@ -1,0 +1,218 @@
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using ViNgocHiep_2123110365.Data;
+using ViNgocHiep_2123110365.DTOs;
+using ViNgocHiep_2123110365.Helpers;
+using ViNgocHiep_2123110365.Models;
+
+namespace ViNgocHiep_2123110365.Controllers
+{
+    [Route("api/admin/books")]
+    [ApiController]
+    [Authorize(Roles = "admin")]
+    public class AdminBooksController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+
+        public AdminBooksController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        // GET: api/admin/books
+        [HttpGet]
+        public async Task<ActionResult<PagedResponse<IEnumerable<BookListResponseDTO>>>> GetBooks(
+            [FromQuery] AdminBookFilter filter
+        )
+        {
+            var query = _context
+                .Books.IgnoreQueryFilters()
+                .Include(b => b.Category)
+                .Include(b => b.User)
+                .AsQueryable();
+
+            if (filter.Status.HasValue)
+                query = query.Where(b => b.Status == filter.Status.Value);
+            if (filter.IsDeleted.HasValue)
+                query = query.Where(b => b.IsDeleted == filter.IsDeleted.Value);
+            if (!string.IsNullOrWhiteSpace(filter.SearchQuery))
+                query = query.Where(b =>
+                    b.Title.ToLower().Contains(filter.SearchQuery.ToLower().Trim())
+                );
+
+            var totalRecords = await query.CountAsync();
+            var pagedData = await query
+                .OrderByDescending(b => b.CreatedAt)
+                .Skip((filter.PageNumber - 1) * filter.PageSize)
+                .Take(filter.PageSize)
+                .Select(b => new BookListResponseDTO
+                {
+                    Id = b.Id,
+                    Title = b.Title,
+                    Thumbnail = b.Thumbnail,
+                    Status = b.Status,
+                    ViewCount = b.ViewCount,
+                    CreatedAt = b.CreatedAt,
+                    IsFavorited = b.IsDeleted,
+                    Category = new CategoryDTO { Id = b.Category!.Id, Name = b.Category.Name },
+                    User = new UserDTO
+                    {
+                        Id = b.User!.Id,
+                        FullName = b.User.FullName,
+                        Username = b.User.Username,
+                    },
+                })
+                .ToListAsync();
+
+            return Ok(
+                new PagedResponse<IEnumerable<BookListResponseDTO>>(
+                    pagedData,
+                    filter.PageNumber,
+                    filter.PageSize,
+                    totalRecords
+                )
+            );
+        }
+
+        [HttpGet("{id}")]
+        public async Task<ActionResult<BookDetailResponseDTO>> GetBook(int id)
+        {
+            var book = await _context
+                .Books.IgnoreQueryFilters()
+                .Include(b => b.Category)
+                .Include(b => b.User)
+                .FirstOrDefaultAsync(b => b.Id == id);
+
+            if (book == null)
+                return NotFound(new { message = "Không tìm thấy bài viết" });
+
+            var response = new BookDetailResponseDTO
+            {
+                Id = book.Id,
+                Title = book.Title,
+                Slug = book.Slug,
+                Thumbnail = book.Thumbnail,
+                Summary = book.Summary,
+                Content = book.Content,
+                ViewCount = book.ViewCount,
+                Status = book.Status,
+                CreatedAt = book.CreatedAt,
+                Category = new CategoryDTO { Id = book.Category!.Id, Name = book.Category.Name },
+                User = new UserDTO { Id = book.User!.Id, FullName = book.User.FullName },
+            };
+
+            return Ok(response);
+        }
+
+        // POST: api/admin/books
+        [HttpPost]
+        public async Task<IActionResult> PostBook([FromForm] CreateUpdateBookDTO request)
+        {
+            var adminId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            var book = new Book
+            {
+                Title = request.Title,
+                Slug = StringHelper.GenerateSlug(request.Title),
+                Summary = request.Summary,
+                Content = request.Content,
+                CategoryId = request.CategoryId,
+                Thumbnail = await FileHelper.UploadFileAsync(request.ThumbnailFile, "books"),
+                UserId = adminId,
+                CreatedAt = DateTime.Now,
+                Status = 1,
+            };
+            _context.Books.Add(book);
+            await _context.SaveChangesAsync();
+            return Ok(new { success = true, message = "Đã đăng bài viết thành công." });
+        }
+
+        // PUT: api/admin/books/{id}
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutBook(int id, [FromForm] CreateUpdateBookDTO request)
+        {
+            var oldBook = await _context
+                .Books.IgnoreQueryFilters()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(b => b.Id == id);
+            if (oldBook == null)
+                return NotFound();
+
+            var adminId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            _context.BookHistories.Add(
+                new BookHistory
+                {
+                    BookId = id,
+                    OldContent = oldBook.Content,
+                    EditedByUserId = adminId,
+                    CreatedAt = DateTime.Now,
+                }
+            );
+
+            var updatedBook = new Book
+            {
+                Id = id,
+                Title = request.Title,
+                Slug = StringHelper.GenerateSlug(request.Title),
+                Summary = request.Summary,
+                Content = request.Content,
+                CategoryId = request.CategoryId,
+                Thumbnail =
+                    request.ThumbnailFile != null
+                        ? await FileHelper.UploadFileAsync(request.ThumbnailFile, "books")
+                        : oldBook.Thumbnail,
+                UserId = oldBook.UserId,
+                CreatedAt = oldBook.CreatedAt,
+                UpdatedAt = DateTime.Now,
+                Status = oldBook.Status,
+                IsDeleted = oldBook.IsDeleted,
+            };
+
+            _context.Entry(updatedBook).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+            return Ok(new { success = true, message = "Cập nhật bài viết thành công." });
+        }
+
+        // DELETE: api/admin/books/{id}
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteBook(int id)
+        {
+            var book = await _context
+                .Books.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(b => b.Id == id);
+            if (book == null)
+                return NotFound();
+
+            book.IsDeleted = true;
+            await _context.SaveChangesAsync();
+            return Ok(new { success = true, message = "Đã khóa bài viết." });
+        }
+
+        // PUT: api/admin/books/{id}/approve
+        [HttpPut("{id}/approve")]
+        public async Task<IActionResult> ApproveBook(int id)
+        {
+            var book = await _context.Books.FindAsync(id);
+            if (book == null)
+                return NotFound();
+            book.Status = 1;
+            await _context.SaveChangesAsync();
+            return Ok(new { success = true, message = "Đã duyệt bài viết thành công." });
+        }
+
+        // PUT: api/admin/books/{id}/restore
+        [HttpPut("{id}/restore")]
+        public async Task<IActionResult> RestoreBook(int id)
+        {
+            var book = await _context
+                .Books.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(b => b.Id == id);
+            if (book == null)
+                return NotFound();
+            book.IsDeleted = false;
+            await _context.SaveChangesAsync();
+            return Ok(new { success = true, message = "Đã khôi phục bài viết." });
+        }
+    }
+}

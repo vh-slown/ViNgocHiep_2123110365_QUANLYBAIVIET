@@ -8,7 +8,7 @@ public class Favorite
     public int UserId { get; set; }
     public int BookId { get; set; }
 
-    public DateTime SavedAt { get; set; } = DateTime.Now;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     // Navigation Properties
     [ForeignKey("UserId")]

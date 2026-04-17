@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ViNgocHiep_2123110365.Data;
 using ViNgocHiep_2123110365.DTOs;
+using ViNgocHiep_2123110365.Helpers;
 using ViNgocHiep_2123110365.Models;
 
 namespace ViNgocHiep_2123110365.Controllers
@@ -19,22 +20,47 @@ namespace ViNgocHiep_2123110365.Controllers
             _context = context;
         }
 
-        // GET: api/Books
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<BookListResponseDTO>>> GetBooks()
+        private int? GetCurrentUserId()
         {
-            int? currentUserId = null;
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int uid))
-            {
-                currentUserId = uid;
-            }
+                return uid;
+            return null;
+        }
 
-            var books = await _context
+        [HttpGet]
+        public async Task<ActionResult<PagedResponse<IEnumerable<BookListResponseDTO>>>> GetBooks(
+            [FromQuery] PublicBookFilter filter
+        )
+        {
+            var currentUserId = GetCurrentUserId();
+            var query = _context
                 .Books.Include(b => b.Category)
                 .Include(b => b.User)
                 .Include(b => b.Favorites)
-                .OrderByDescending(b => b.CreatedAt)
+                .Where(b => b.Status == 1)
+                .AsQueryable();
+
+            if (filter.CategoryId.HasValue)
+                query = query.Where(b => b.CategoryId == filter.CategoryId.Value);
+            if (!string.IsNullOrWhiteSpace(filter.SearchQuery))
+            {
+                var search = filter.SearchQuery.ToLower().Trim();
+                query = query.Where(b =>
+                    b.Title.ToLower().Contains(search)
+                    || (b.Summary != null && b.Summary.ToLower().Contains(search))
+                );
+            }
+
+            query =
+                filter.SortBy?.ToLower() == "view_desc"
+                    ? query.OrderByDescending(b => b.ViewCount)
+                    : query.OrderByDescending(b => b.CreatedAt);
+
+            var totalRecords = await query.CountAsync();
+            var pagedData = await query
+                .Skip((filter.PageNumber - 1) * filter.PageSize)
+                .Take(filter.PageSize)
                 .Select(b => new BookListResponseDTO
                 {
                     Id = b.Id,
@@ -61,35 +87,38 @@ namespace ViNgocHiep_2123110365.Controllers
                         Id = b.User!.Id,
                         FullName = b.User.FullName,
                         Username = b.User.Username,
-                        Avatar = b.User.Avatar,
                     },
                 })
                 .ToListAsync();
 
-            return Ok(books);
+            return Ok(
+                new PagedResponse<IEnumerable<BookListResponseDTO>>(
+                    pagedData,
+                    filter.PageNumber,
+                    filter.PageSize,
+                    totalRecords
+                )
+            );
         }
 
-        // GET: api/Books/{id}
-        [HttpGet("{id}")]
-        public async Task<ActionResult<BookDetailResponseDTO>> GetBook(int id)
+        // GET: api/Books/{slug}
+        [HttpGet("{slug}")]
+        public async Task<ActionResult<BookDetailResponseDTO>> GetBook(string slug)
         {
-            int? currentUserId = null;
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int uid))
-            {
-                currentUserId = uid;
-            }
-
+            var currentUserId = GetCurrentUserId();
             var book = await _context
                 .Books.Include(b => b.Category)
                 .Include(b => b.User)
                 .Include(b => b.Favorites)
-                .Include(b => b.Comments)
+                .Include(b => b.Comments!)
                 .ThenInclude(c => c.User)
-                .FirstOrDefaultAsync(b => b.Id == id);
+                .FirstOrDefaultAsync(b => b.Slug == slug);
 
             if (book == null)
-                return NotFound();
+                return NotFound(new { message = "Không tìm thấy bài viết." });
+
+            if (book.Status == 0 && (!currentUserId.HasValue || currentUserId.Value != book.UserId))
+                return Forbid();
 
             var bookDetail = new BookDetailResponseDTO
             {
@@ -105,7 +134,7 @@ namespace ViNgocHiep_2123110365.Controllers
 
                 IsFavorited =
                     currentUserId.HasValue
-                    && book.Favorites.Any(f => f.UserId == currentUserId.Value),
+                    && book.Favorites!.Any(f => f.UserId == currentUserId.Value),
 
                 Category = new CategoryDTO
                 {
@@ -120,9 +149,7 @@ namespace ViNgocHiep_2123110365.Controllers
                     Username = book.User.Username,
                     Avatar = book.User.Avatar,
                 },
-
-                Comments = book
-                    .Comments.Select(c => new CommentDTO
+                Comments = book.Comments!.Select(c => new CommentDTO
                     {
                         Id = c.Id,
                         Content = c.Content,
@@ -139,149 +166,7 @@ namespace ViNgocHiep_2123110365.Controllers
                     .OrderByDescending(c => c.CreatedAt)
                     .ToList(),
             };
-
             return Ok(bookDetail);
-        }
-
-        // POST: api/Books
-        [Authorize(Roles = "admin,member")]
-        [HttpPost]
-        public async Task<ActionResult<Book>> PostBook(Book book)
-        {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int uid))
-            {
-                book.UserId = uid;
-            }
-
-            book.CreatedAt = DateTime.Now;
-
-            _context.Books.Add(book);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction("GetBook", new { id = book.Id }, book);
-        }
-
-        // PUT: api/Books/{id}
-        [Authorize(Roles = "admin,member")]
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutBook(int id, Book book)
-        {
-            if (id != book.Id)
-                return BadRequest();
-
-            var oldBook = await _context.Books.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id);
-            if (oldBook == null)
-                return NotFound();
-
-            var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
-            var isUserAdmin = User.IsInRole("admin");
-
-            if (!isUserAdmin && oldBook.UserId != currentUserId)
-            {
-                return Forbid();
-            }
-
-            var history = new BookHistory
-            {
-                BookId = id,
-                OldContent = oldBook.Content,
-                EditedByUserId = currentUserId,
-                EditedAt = DateTime.Now,
-            };
-            _context.BookHistories.Add(history);
-
-            book.UpdatedAt = DateTime.Now;
-
-            book.UserId = oldBook.UserId;
-
-            _context.Entry(book).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!BookExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return NoContent();
-        }
-
-        // DELETE: api/Books/{id}
-        [Authorize(Roles = "admin,member")]
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteBook(int id)
-        {
-            var book = await _context.Books.FindAsync(id);
-            if (book == null)
-                return NotFound();
-
-            var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
-            var isUserAdmin = User.IsInRole("admin");
-
-            if (!isUserAdmin && book.UserId != currentUserId)
-            {
-                return Forbid();
-            }
-
-            book.IsDeleted = true;
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
-
-        // POST: api/Books/{id}/increment-view
-        [HttpPost("{id}/increment-view")]
-        public async Task<IActionResult> IncrementViewCount(int id)
-        {
-            var book = await _context.Books.FindAsync(id);
-            if (book == null)
-                return NotFound();
-
-            book.ViewCount += 1;
-            await _context.SaveChangesAsync();
-            return Ok(new { message = "Đã tăng lượt xem", newViewCount = book.ViewCount });
-        }
-
-        [HttpGet("categories")]
-        public async Task<ActionResult<IEnumerable<BookListResponseDTO>>> GetBooksByCategories(
-            [FromQuery] int[] categoryIds
-        )
-        {
-            var query = _context.Books.Include(b => b.Category).Include(b => b.User).AsQueryable();
-
-            if (categoryIds != null && categoryIds.Length > 0)
-            {
-                query = query.Where(b => categoryIds.Contains(b.CategoryId));
-            }
-
-            var books = await query
-                .OrderByDescending(b => b.CreatedAt)
-                .Select(b => new BookListResponseDTO
-                {
-                    Id = b.Id,
-                    Title = b.Title,
-                    Slug = b.Slug,
-                    Thumbnail = b.Thumbnail,
-                    Summary = b.Summary,
-                    ViewCount = b.ViewCount,
-                    Status = b.Status,
-                    CreatedAt = b.CreatedAt,
-                    Category = new CategoryDTO { Id = b.Category!.Id, Name = b.Category.Name },
-                    User = new UserDTO { Id = b.User!.Id, FullName = b.User.FullName },
-                })
-                .ToListAsync();
-
-            return Ok(books);
         }
 
         [HttpGet("{id}/related")]
@@ -297,7 +182,7 @@ namespace ViNgocHiep_2123110365.Controllers
             var relatedBooks = await _context
                 .Books.Include(b => b.Category)
                 .Include(b => b.User)
-                .Where(b => b.CategoryId == currentBook.CategoryId && b.Id != id)
+                .Where(b => b.Status == 1 && b.CategoryId == currentBook.CategoryId && b.Id != id)
                 .OrderByDescending(b => b.CreatedAt)
                 .Take(limit)
                 .Select(b => new BookListResponseDTO
@@ -318,9 +203,193 @@ namespace ViNgocHiep_2123110365.Controllers
             return Ok(relatedBooks);
         }
 
-        private bool BookExists(int id)
+        [Authorize(Roles = "user,admin")]
+        [HttpGet("my-books")]
+        public async Task<ActionResult<PagedResponse<IEnumerable<BookListResponseDTO>>>> GetMyBooks(
+            [FromQuery] MyBookFilter filter
+        )
         {
-            return _context.Books.Any(e => e.Id == id);
+            var currentUserId = GetCurrentUserId()!.Value;
+            var query = _context
+                .Books.Include(b => b.Category)
+                .Where(b => b.UserId == currentUserId)
+                .AsQueryable();
+
+            if (filter.Status.HasValue)
+                query = query.Where(b => b.Status == filter.Status.Value);
+
+            var totalRecords = await query.CountAsync();
+            var pagedData = await query
+                .OrderByDescending(b => b.CreatedAt)
+                .Skip((filter.PageNumber - 1) * filter.PageSize)
+                .Take(filter.PageSize)
+                .Select(b => new BookListResponseDTO
+                {
+                    Id = b.Id,
+                    Title = b.Title,
+                    Thumbnail = b.Thumbnail,
+                    Status = b.Status,
+                    CreatedAt = b.CreatedAt,
+                    ViewCount = b.ViewCount,
+                    Category = new CategoryDTO { Id = b.Category!.Id, Name = b.Category.Name },
+                })
+                .ToListAsync();
+
+            return Ok(
+                new PagedResponse<IEnumerable<BookListResponseDTO>>(
+                    pagedData,
+                    filter.PageNumber,
+                    filter.PageSize,
+                    totalRecords
+                )
+            );
+        }
+
+        [HttpPost("{id}/increment-view")]
+        public async Task<IActionResult> IncrementViewCount(int id)
+        {
+            var book = await _context.Books.FindAsync(id);
+            if (book == null)
+                return NotFound();
+            book.ViewCount += 1;
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Đã tăng lượt xem", newViewCount = book.ViewCount });
+        }
+
+        // POST: api/Books
+        [Authorize(Roles = "admin,user")]
+        [HttpPost]
+        public async Task<IActionResult> PostBook([FromForm] CreateUpdateBookDTO request)
+        {
+            var book = new Book
+            {
+                Title = request.Title,
+                Slug = StringHelper.GenerateSlug(request.Title),
+                Summary = request.Summary,
+                Content = request.Content,
+                CategoryId = request.CategoryId,
+                Thumbnail = await FileHelper.UploadFileAsync(request.ThumbnailFile, "books"),
+                UserId = GetCurrentUserId()!.Value,
+                CreatedAt = DateTime.Now,
+                Status = 0,
+            };
+            _context.Books.Add(book);
+            await _context.SaveChangesAsync();
+            return Ok(new { success = true, message = "Bài viết đang chờ Admin phê duyệt." });
+        }
+
+        // PUT: api/Books/{id}
+        [Authorize(Roles = "admin,user")]
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutBook(int id, [FromForm] CreateUpdateBookDTO request)
+        {
+            var oldBook = await _context.Books.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id);
+            if (oldBook == null)
+            {
+                return NotFound();
+            }
+
+            var currentUserId = GetCurrentUserId()!.Value;
+            if (oldBook.UserId != currentUserId)
+            {
+                return Forbid();
+            }
+
+            _context.BookHistories.Add(
+                new BookHistory
+                {
+                    BookId = id,
+                    OldContent = oldBook.Content,
+                    EditedByUserId = currentUserId,
+                    CreatedAt = DateTime.Now,
+                }
+            );
+
+            var updatedBook = new Book
+            {
+                Id = id,
+                Title = request.Title,
+                Slug = StringHelper.GenerateSlug(request.Title),
+                Summary = request.Summary,
+                Content = request.Content,
+                CategoryId = request.CategoryId,
+                Thumbnail =
+                    request.ThumbnailFile != null
+                        ? await FileHelper.UploadFileAsync(request.ThumbnailFile, "books")
+                        : oldBook.Thumbnail,
+                UserId = oldBook.UserId,
+                CreatedAt = oldBook.CreatedAt,
+                UpdatedAt = DateTime.Now,
+                Status = 0,
+            };
+
+            _context.Entry(updatedBook).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+            return Ok(
+                new
+                {
+                    success = true,
+                    message = "Cập nhật thành công, đang chờ duyệt lại bài viết!",
+                }
+            );
+        }
+
+        // DELETE: api/Books/{id}
+        [Authorize(Roles = "admin,user")]
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteBook(int id)
+        {
+            var book = await _context.Books.FindAsync(id);
+            if (book == null)
+                return NotFound();
+
+            var currentUserId = GetCurrentUserId()!.Value;
+            if (book.UserId != currentUserId)
+                return Forbid();
+
+            book.IsDeleted = true;
+            await _context.SaveChangesAsync();
+            return Ok(new { success = true, message = "Đã xóa bài viết." });
+        }
+
+        [HttpGet("user/{username}")]
+        public async Task<
+            ActionResult<PagedResponse<IEnumerable<BookListResponseDTO>>>
+        > GetUserBooks(string username, [FromQuery] PaginationFilter filter)
+        {
+            var query = _context
+                .Books.Include(b => b.Category)
+                .Include(b => b.User)
+                .Where(b => b.User!.Username == username && b.Status == 1)
+                .AsQueryable();
+
+            var totalRecords = await query.CountAsync();
+            var pagedData = await query
+                .OrderByDescending(b => b.CreatedAt)
+                .Skip((filter.PageNumber - 1) * filter.PageSize)
+                .Take(filter.PageSize)
+                .Select(b => new BookListResponseDTO
+                {
+                    Id = b.Id,
+                    Title = b.Title,
+                    Slug = b.Slug,
+                    Thumbnail = b.Thumbnail,
+                    Summary = b.Summary,
+                    ViewCount = b.ViewCount,
+                    CreatedAt = b.CreatedAt,
+                    Category = new CategoryDTO { Name = b.Category!.Name },
+                    User = new UserDTO { FullName = b.User!.FullName, Username = b.User.Username },
+                })
+                .ToListAsync();
+
+            return Ok(
+                new PagedResponse<IEnumerable<BookListResponseDTO>>(
+                    pagedData,
+                    filter.PageNumber,
+                    filter.PageSize,
+                    totalRecords
+                )
+            );
         }
     }
 }

@@ -20,6 +20,10 @@ public class Category
 
     public string? Description { get; set; }
 
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? UpdatedAt { get; set; }
+    public bool IsDeleted { get; set; } = false;
+
     // Navigation Property
     public ICollection<Book>? Books { get; set; }
 }

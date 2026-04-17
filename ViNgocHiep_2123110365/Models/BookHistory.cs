@@ -9,7 +9,7 @@ namespace ViNgocHiep_2123110365.Models
         public int Id { get; set; }
         public int BookId { get; set; }
         public string OldContent { get; set; } = string.Empty;
-        public DateTime EditedAt { get; set; } = DateTime.Now;
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
         public int EditedByUserId { get; set; }
 
         [ForeignKey("BookId")]

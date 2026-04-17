@@ -10,7 +10,7 @@ using ViNgocHiep_2123110365.Models;
 
 namespace ViNgocHiep_2123110365.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/books")]
     [ApiController]
     public class AuthController : ControllerBase
     {
@@ -40,7 +40,7 @@ namespace ViNgocHiep_2123110365.Controllers
                 FullName = request.FullName,
                 Email = request.Email,
                 Password = passwordHash,
-                Role = "member",
+                Role = "user",
                 CreatedAt = DateTime.Now,
             };
 

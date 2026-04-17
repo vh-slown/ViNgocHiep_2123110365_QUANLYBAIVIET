@@ -31,7 +31,7 @@ namespace ViNgocHiep_2123110365.Controllers
                 .ThenInclude(b => b.Category)
                 .Include(f => f.Book)
                 .ThenInclude(b => b.User)
-                .OrderByDescending(f => f.SavedAt)
+                .OrderByDescending(f => f.CreatedAt)
                 .Select(f => new BookListResponseDTO
                 {
                     Id = f.Book!.Id,
@@ -74,7 +74,7 @@ namespace ViNgocHiep_2123110365.Controllers
                 return BadRequest(new { message = "Bạn đã yêu thích bài viết này rồi!" });
             }
 
-            favorite.SavedAt = DateTime.Now;
+            favorite.CreatedAt = DateTime.Now;
 
             _context.Favorites.Add(favorite);
             await _context.SaveChangesAsync();

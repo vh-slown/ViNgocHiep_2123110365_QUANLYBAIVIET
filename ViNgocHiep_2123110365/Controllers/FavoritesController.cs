@@ -78,8 +78,12 @@ namespace ViNgocHiep_2123110365.Controllers
 
             _context.Favorites.Add(favorite);
             await _context.SaveChangesAsync();
-
-            return Ok(new { message = "Đã thêm vào danh sách yêu thích" });
+                return Ok(
+                    new
+                    {
+                        success = true,
+                        message = "Đã thêm vào danh sách yêu thích.",
+                        isFavorited = true,
         }
 
         // DELETE: api/Favorites/Book/1/User/1

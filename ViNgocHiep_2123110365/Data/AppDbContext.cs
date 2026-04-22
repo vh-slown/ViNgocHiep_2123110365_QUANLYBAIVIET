@@ -37,7 +37,7 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<Book>().HasQueryFilter(b => !b.IsDeleted);
         modelBuilder.Entity<User>().HasQueryFilter(u => !u.IsDeleted);
-
+        modelBuilder.Entity<Category>().HasQueryFilter(c => !c.IsDeleted);
         modelBuilder.Entity<Comment>().HasQueryFilter(c => !c.IsDeleted && !c.Book!.IsDeleted);
 
         modelBuilder.Entity<Favorite>().HasQueryFilter(f => !f.Book!.IsDeleted);

@@ -1,9 +1,8 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ViNgocHiep_2123110365.Data;
 using ViNgocHiep_2123110365.DTOs;
-using ViNgocHiep_2123110365.Models;
+using ViNgocHiep_2123110365.Helpers;
 
 namespace ViNgocHiep_2123110365.Controllers
 {
@@ -20,103 +19,64 @@ namespace ViNgocHiep_2123110365.Controllers
 
         // GET: api/Categories
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<CategoryDTO>>> GetCategories()
+        public async Task<ActionResult<PagedResponse<IEnumerable<CategoryDTO>>>> GetCategories(
+            [FromQuery] PublicCategoryFilter filter
+        )
         {
-            return await _context
-                .Categories.Select(c => new CategoryDTO
+            var query = _context.Categories.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(filter.SearchQuery))
+            {
+                query = query.Where(c =>
+                    c.Name.ToLower().Contains(filter.SearchQuery.ToLower().Trim())
+                );
+            }
+
+            var totalRecords = await query.CountAsync();
+            var pagedData = await query
+                .OrderByDescending(c => c.CreatedAt)
+                .Skip((filter.PageNumber - 1) * filter.PageSize)
+                .Take(filter.PageSize)
+                .Select(c => new CategoryDTO
                 {
                     Id = c.Id,
                     Name = c.Name,
                     Slug = c.Slug,
                     Image = c.Image,
                     Description = c.Description,
+                    CreatedAt = c.CreatedAt,
                 })
                 .ToListAsync();
+
+            return Ok(
+                new PagedResponse<IEnumerable<CategoryDTO>>(
+                    pagedData,
+                    filter.PageNumber,
+                    filter.PageSize,
+                    totalRecords
+                )
+            );
         }
 
-        // GET: api/Categories/{id}
-        [HttpGet("{id}")]
-        public async Task<ActionResult<CategoryDTO>> GetCategory(int id)
+        // GET: api/Categories/{slug}
+        [HttpGet("{slug}")]
+        public async Task<ActionResult<CategoryDTO>> GetCategory(string slug)
         {
-            var category = await _context.Categories.FindAsync(id);
-
+            var category = await _context.Categories.FirstOrDefaultAsync(c => c.Slug == slug);
             if (category == null)
-            {
-                return NotFound();
-            }
+                return NotFound(new { message = "Không tìm thấy danh mục." });
 
-            return new CategoryDTO
-            {
-                Id = category.Id,
-                Name = category.Name,
-                Slug = category.Slug,
-                Image = category.Image,
-                Description = category.Description,
-            };
-        }
-
-        // POST: api/Categories
-        [Authorize(Roles = "admin")]
-        [HttpPost]
-        public async Task<ActionResult<Category>> PostCategory(Category category)
-        {
-            _context.Categories.Add(category);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction("GetCategory", new { id = category.Id }, category);
-        }
-
-        // PUT: api/Categories/{id}
-        [Authorize(Roles = "admin")]
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutCategory(int id, Category category)
-        {
-            if (id != category.Id)
-            {
-                return BadRequest();
-            }
-
-            _context.Entry(category).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!CategoryExists(id))
+            return Ok(
+                new CategoryDTO
                 {
-                    return NotFound();
+                    Id = category.Id,
+                    Name = category.Name,
+                    Slug = category.Slug,
+                    Image = category.Image,
+                    Description = category.Description,
+                    CreatedAt = category.CreatedAt,
                 }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return NoContent();
-        }
-
-        // DELETE: api/Categories/{id}
-        [Authorize(Roles = "admin")]
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteCategory(int id)
-        {
-            var category = await _context.Categories.FindAsync(id);
-            if (category == null)
-            {
-                return NotFound();
-            }
-
-            _context.Categories.Remove(category);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
-
-        private bool CategoryExists(int id)
-        {
-            return _context.Categories.Any(e => e.Id == id);
+            );
         }
     }
 }

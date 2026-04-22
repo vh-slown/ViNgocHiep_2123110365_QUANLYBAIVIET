@@ -1,8 +1,10 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ViNgocHiep_2123110365.Data;
 using ViNgocHiep_2123110365.DTOs;
-using ViNgocHiep_2123110365.Models;
+using ViNgocHiep_2123110365.Helpers;
 
 namespace ViNgocHiep_2123110365.Controllers
 {
@@ -17,100 +19,111 @@ namespace ViNgocHiep_2123110365.Controllers
             _context = context;
         }
 
-        // GET: api/Users
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<UserDTO>>> GetUsers()
+        private int GetCurrentUserId()
         {
-            return await _context
-                .Users.Select(u => new UserDTO
-                {
-                    Id = u.Id,
-                    FullName = u.FullName,
-                    Username = u.Username,
-                    Avatar = u.Avatar,
-                })
-                .ToListAsync();
+            return int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
         }
 
-        // GET: api/Users/{id}
-        [HttpGet("{id}")]
-        public async Task<ActionResult<UserDTO>> GetUser(int id)
-        {
-            var user = await _context.Users.FindAsync(id);
+        // ================= PUBLIC APIS =================
 
+        // GET: api/users/profile/{username}
+        [HttpGet("profile/{username}")]
+        public async Task<ActionResult<UserProfileDTO>> GetPublicProfile(string username)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
             if (user == null)
-            {
-                return NotFound();
-            }
+                return NotFound(new { message = "Không tìm thấy người dùng." });
 
-            return new UserDTO
-            {
-                Id = user.Id,
-                FullName = user.FullName,
-                Username = user.Username,
-                Avatar = user.Avatar,
-            };
-        }
-
-        // POST: api/Users
-        [HttpPost]
-        public async Task<ActionResult<User>> PostUser(User user)
-        {
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction("GetUser", new { id = user.Id }, user);
-        }
-
-        // PUT: api/Users/{id}
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutUser(int id, User user)
-        {
-            if (id != user.Id)
-            {
-                return BadRequest();
-            }
-
-            _context.Entry(user).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!UserExists(id))
+            return Ok(
+                new UserProfileDTO
                 {
-                    return NotFound();
+                    Id = user.Id,
+                    FullName = user.FullName,
+                    Username = user.Username,
+                    Avatar = user.Avatar,
+                    Bio = user.Bio,
+                    Role = user.Role,
+                    Status = user.Status,
+                    CreatedAt = user.CreatedAt,
                 }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return NoContent();
+            );
         }
 
-        // DELETE: api/Users/{id}
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteUser(int id)
+        // ================= PRIVATE APIS =================
+
+        // GET: api/users/me
+        [Authorize]
+        [HttpGet("me")]
+        public async Task<ActionResult<UserProfileDTO>> GetMyProfile()
         {
-            var user = await _context.Users.FindAsync(id);
+            var userId = GetCurrentUserId();
+            var user = await _context.Users.FindAsync(userId);
             if (user == null)
-            {
-                return NotFound();
-            }
+                return Unauthorized();
 
-            user.IsDeleted = true;
-            await _context.SaveChangesAsync();
-
-            return NoContent();
+            return Ok(
+                new UserProfileDTO
+                {
+                    Id = user.Id,
+                    FullName = user.FullName,
+                    Username = user.Username,
+                    Avatar = user.Avatar,
+                    Bio = user.Bio,
+                    Role = user.Role,
+                    Status = user.Status,
+                    CreatedAt = user.CreatedAt,
+                }
+            );
         }
 
-        private bool UserExists(int id)
+        // PUT: api/users/me
+        [Authorize]
+        [HttpPut("me")]
+        public async Task<IActionResult> UpdateMyProfile([FromForm] UpdateProfileDTO request)
         {
-            return _context.Users.Any(e => e.Id == id);
+            var userId = GetCurrentUserId();
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+                return Unauthorized();
+
+            user.FullName = request.FullName;
+            user.Bio = request.Bio;
+            user.UpdatedAt = DateTime.Now;
+
+            if (request.AvatarFile != null)
+            {
+                user.Avatar = await FileHelper.UploadFileAsync(request.AvatarFile, "users");
+            }
+
+            _ = await _context.SaveChangesAsync();
+            return Ok(
+                new
+                {
+                    success = true,
+                    message = "Cập nhật hồ sơ thành công.",
+                    avatarUrl = user.Avatar,
+                }
+            );
+        }
+
+        // PUT: api/users/change-password
+        [Authorize]
+        [HttpPut("change-password")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDTO request)
+        {
+            var userId = GetCurrentUserId();
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+                return Unauthorized();
+
+            if (!BCrypt.Net.BCrypt.Verify(request.OldPassword, user.Password))
+                return BadRequest(new { message = "Mật khẩu hiện tại không chính xác." });
+
+            user.Password = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            user.UpdatedAt = DateTime.Now;
+
+            await _context.SaveChangesAsync();
+            return Ok(new { success = true, message = "Đổi mật khẩu thành công!" });
         }
     }
 }

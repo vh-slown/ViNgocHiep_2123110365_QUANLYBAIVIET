@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ViNgocHiep_2123110365.Data;
@@ -9,7 +10,7 @@ namespace ViNgocHiep_2123110365.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize]
+    [Authorize(Roles = "user,admin")]
     public class FavoritesController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -19,18 +20,24 @@ namespace ViNgocHiep_2123110365.Controllers
             _context = context;
         }
 
-        // GET: api/Favorites/User/{id}
-        [HttpGet("User/{userId}")]
-        public async Task<ActionResult<IEnumerable<BookListResponseDTO>>> GetUserFavorites(
-            int userId
-        )
+        private int GetCurrentUserId()
         {
+            return int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+        }
+
+        // GET: api/Favorites/my-favorites
+        [HttpGet("my-favorites")]
+        public async Task<ActionResult<IEnumerable<BookListResponseDTO>>> GetMyFavorites()
+        {
+            var userId = GetCurrentUserId();
+
             var favoriteBooks = await _context
                 .Favorites.Where(f => f.UserId == userId)
                 .Include(f => f.Book)
                 .ThenInclude(b => b.Category)
                 .Include(f => f.Book)
                 .ThenInclude(b => b.User)
+                .Where(f => f.Book!.IsDeleted == false && f.Book.Status != 3)
                 .OrderByDescending(f => f.CreatedAt)
                 .Select(f => new BookListResponseDTO
                 {
@@ -53,7 +60,6 @@ namespace ViNgocHiep_2123110365.Controllers
                         Id = f.Book.User!.Id,
                         FullName = f.Book.User.FullName,
                         Username = f.Book.User.Username,
-                        Avatar = f.Book.User.Avatar,
                     },
                 })
                 .ToListAsync();
@@ -61,48 +67,54 @@ namespace ViNgocHiep_2123110365.Controllers
             return Ok(favoriteBooks);
         }
 
-        // POST: api/Favorites
-        [HttpPost]
-        public async Task<IActionResult> PostFavorite(Favorite favorite)
+        // POST: api/Favorites/Book/{bookId}
+        [HttpPost("Book/{bookId}")]
+        public async Task<IActionResult> ToggleFavorite(int bookId)
         {
-            var exists = await _context.Favorites.AnyAsync(f =>
-                f.UserId == favorite.UserId && f.BookId == favorite.BookId
+            var userId = GetCurrentUserId();
+
+            var book = await _context.Books.FirstOrDefaultAsync(b =>
+                b.Id == bookId && !b.IsDeleted && b.Status == 1
+            );
+            if (book == null)
+                return NotFound(new { message = "Sách không tồn tại hoặc đã bị ẩn." });
+
+            var existingFavorite = await _context.Favorites.FirstOrDefaultAsync(f =>
+                f.UserId == userId && f.BookId == bookId
             );
 
-            if (exists)
+            if (existingFavorite != null)
             {
-                return BadRequest(new { message = "Bạn đã yêu thích bài viết này rồi!" });
+                _context.Favorites.Remove(existingFavorite);
+                await _context.SaveChangesAsync();
+                return Ok(
+                    new
+                    {
+                        success = true,
+                        message = "Đã bỏ yêu thích.",
+                        isFavorited = false,
+                    }
+                );
             }
-
-            favorite.CreatedAt = DateTime.Now;
-
-            _context.Favorites.Add(favorite);
-            await _context.SaveChangesAsync();
+            else
+            {
+                var newFavorite = new Favorite
+                {
+                    UserId = userId,
+                    BookId = bookId,
+                    CreatedAt = DateTime.Now,
+                };
+                _context.Favorites.Add(newFavorite);
+                await _context.SaveChangesAsync();
                 return Ok(
                     new
                     {
                         success = true,
                         message = "Đã thêm vào danh sách yêu thích.",
                         isFavorited = true,
-        }
-
-        // DELETE: api/Favorites/Book/1/User/1
-        [HttpDelete("Book/{bookId}/User/{userId}")]
-        public async Task<IActionResult> DeleteFavorite(int bookId, int userId)
-        {
-            var favorite = await _context.Favorites.FirstOrDefaultAsync(f =>
-                f.BookId == bookId && f.UserId == userId
-            );
-
-            if (favorite == null)
-            {
-                return NotFound(new { message = "Chưa yêu thích bài viết này" });
+                    }
+                );
             }
-
-            _context.Favorites.Remove(favorite);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { message = "Đã bỏ yêu thích" });
         }
     }
 }

@@ -56,20 +56,30 @@ namespace ViNgocHiep_2123110365.Controllers
             var user = await _context.Users.SingleOrDefaultAsync(u =>
                 u.Username == request.Username
             );
-            if (user == null)
-            {
-                return Unauthorized("Sai tên đăng nhập hoặc mật khẩu.");
-            }
 
-            bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, user.Password);
-            if (!isPasswordValid)
-            {
-                return Unauthorized("Sai tên đăng nhập hoặc mật khẩu.");
-            }
+            if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.Password))
+                return Unauthorized(new { message = "Sai tài khoản hoặc mật khẩu." });
+
+            if (user.Status == 2)
+                return StatusCode(
+                    403,
+                    new { message = "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Admin." }
+                );
 
             var token = GenerateJwtToken(user);
-
-            return Ok(new { message = "Đăng nhập thành công!", token = token });
+            return Ok(
+                new
+                {
+                    token,
+                    user = new UserDTO
+                    {
+                        Id = user.Id,
+                        FullName = user.FullName,
+                        Username = user.Username,
+                        Avatar = user.Avatar,
+                    },
+                }
+            );
         }
 
         private string GenerateJwtToken(User user)

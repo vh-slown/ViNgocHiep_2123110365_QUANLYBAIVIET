@@ -56,7 +56,7 @@ namespace ViNgocHiep_2123110365.Controllers
                     Status = b.Status,
                     ViewCount = b.ViewCount,
                     CreatedAt = b.CreatedAt,
-                    IsFavorited = b.IsDeleted,
+                    IsDeleted = b.IsDeleted,
                     FavoriteCount = b.Favorites!.Count,
                     Category = new CategoryDTO { Id = b.Category!.Id, Name = b.Category.Name },
                     User = new UserDTO

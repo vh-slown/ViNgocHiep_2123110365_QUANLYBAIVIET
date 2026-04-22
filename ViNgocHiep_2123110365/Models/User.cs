@@ -34,6 +34,9 @@ public class User
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
+    public byte Status { get; set; } = 1;
+
+    public DateTime? UpdatedAt { get; set; }
     public bool IsDeleted { get; set; } = false;
 
     // Navigation Properties

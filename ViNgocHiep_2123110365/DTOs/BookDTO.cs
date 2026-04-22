@@ -12,6 +12,8 @@
         public DateTime CreatedAt { get; set; }
 
         public bool IsFavorited { get; set; } = false;
+
+        public bool IsDeleted { get; set; } = false;
         public CategoryDTO? Category { get; set; }
         public UserDTO? User { get; set; }
 

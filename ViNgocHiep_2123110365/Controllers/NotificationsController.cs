@@ -33,6 +33,41 @@ namespace ViNgocHiep_2123110365.Controllers
             return Ok(notifications);
         }
 
+        // GET: api/Notifications/all
+        [HttpGet("all")]
+        [Authorize]
+        public async Task<IActionResult> GetAllNotifications(
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 15
+        )
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Vui lòng đăng nhập." });
+            }
+
+            var query = _context.Notifications.Where(n => n.UserId == userId);
+
+            var totalRecords = await query.CountAsync();
+
+            var notifications = await query
+                .OrderByDescending(n => n.CreatedAt)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return Ok(
+                new
+                {
+                    TotalRecords = totalRecords,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize,
+                    Data = notifications,
+                }
+            );
+        }
+
         [HttpPut("{id}/read")]
         public async Task<IActionResult> MarkAsRead(int id)
         {

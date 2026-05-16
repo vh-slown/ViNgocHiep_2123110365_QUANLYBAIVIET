@@ -197,6 +197,7 @@ namespace ViNgocHiep_2123110365.Controllers
                 UpdatedAt = DateTime.Now,
                 Status = oldBook.Status,
                 IsDeleted = oldBook.IsDeleted,
+                ViewCount = oldBook.ViewCount,
             };
 
             _context.Entry(updatedBook).State = EntityState.Modified;

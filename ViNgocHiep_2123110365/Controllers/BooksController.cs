@@ -409,6 +409,7 @@ namespace ViNgocHiep_2123110365.Controllers
                 CreatedAt = oldBook.CreatedAt,
                 UpdatedAt = DateTime.Now,
                 Status = isAdmin ? oldBook.Status : (byte)0,
+                ViewCount = oldBook.ViewCount,
             };
 
             _context.Entry(updatedBook).State = EntityState.Modified;
